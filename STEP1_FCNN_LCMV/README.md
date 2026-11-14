@@ -1,43 +1,44 @@
-# Step 1: FCNN that learns the LCMV beamformer
+# Step 1: Learning the LCMV Beamformer with a Fully Connected Neural Network
 
-A fully connected neural network (FCNN) is trained to predict the complex excitation weights of a linear array from two directions: the **desired signal direction** and the **interference direction**. The reference LCMV beamformer generates the labels. The FCNN is then compared with LCMV on direction combinations that were never used during training.
+A fully connected neural network (FCNN) predicts the complex excitation weights of a linear array from two inputs: the **desired signal direction** and the **interference direction**. A linearly constrained minimum variance (LCMV) beamformer provides the training labels. It is also the reference against which the network is evaluated, on direction combinations never seen during training.
 
-## How to run
+## Quick start
 
-1. Open MATLAB in this folder.
-2. Run `MAIN_FCNN_LCMV`.
+```matlab
+MAIN_FCNN_LCMV
+```
 
-| Requirement | Detail |
+| | |
 |---|---|
-| MATLAB | Developed and tested on R2024b |
-| Toolboxes | None; base MATLAB is enough |
-| Run time | About 5 minutes on a laptop CPU, almost all of it training |
+| Software | MATLAB R2024b or later; no toolbox required |
+| Run time | About 5 minutes on a laptop CPU |
+| Outputs | Command-window summary, result files and figures in `OUTPUT/` |
 
-All parameters are defined at the top of `MAIN_FCNN_LCMV.m`. Results are printed in the command window and written to `OUTPUT/` (summary, per-example table, figures). The script recreates that folder, so it is not stored in the repository.
+All parameters are defined at the top of `MAIN_FCNN_LCMV.m`.
 
-## Fixed setup
-
-All parameters are kept fixed, so the two directions fully define each example.
+## Scenario
 
 | Parameter | Value |
 |---|---|
-| Array | Linear, 8 isotropic elements along x, λ/2 spacing |
+| Array | Linear, 8 isotropic elements, λ/2 spacing |
 | Frequency | 3 GHz |
-| Directions | θ measured from broadside (+z), cut φ = 0° |
+| Angular convention | θ from broadside (+z), cut φ = 0° |
 | Sources | 1 desired signal, 1 interferer |
 | Noise power | 1 |
-| Interference power | 100 (INR = 20 dB) |
-| Diagonal loading | 10⁻³ (same as the reference LCMV code) |
+| Interference-to-noise ratio | 20 dB |
+| Diagonal loading | 10⁻³ |
+
+All parameters except the two directions are fixed, so the directions fully define each example.
 
 ## Dataset
 
-- **Labels.** For every pair (θ_d, θ_i), the reference LCMV code:
-  1. builds the covariance R = noise + one interferer at θ_i;
-  2. solves for the weights w with response 1 at θ_d and a null at θ_i.
-- **Direction grid.** θ_d and θ_i each take every value from −60° to 60° in steps of 1°.
-- **Excluded pairs.** Pairs with |θ_d − θ_i| < 5° are left out. In that range the interferer is inside the main beam (about 13° wide for 8 elements), the constraints become nearly dependent, and the LCMV weights grow quickly: about 3× at 3° and 9× at 1°.
+- **Labels.** For each pair (θ_d, θ_i):
+  1. the covariance matrix is built from noise and one interferer at θ_i;
+  2. LCMV computes the weights that give unit response at θ_d and a null at θ_i.
+- **Grid.** θ_d and θ_i each take every value from −60° to 60° in 1° steps.
+- **Excluded pairs.** Pairs with |θ_d − θ_i| < 5° are excluded. There the interferer lies inside the main beam (about 13° wide), the constraints become nearly dependent, and the weight norm grows by a factor of 3 at 3° and 9 at 1°.
 - **Size.** 13,572 examples.
-- **Split.** Random, with seed 1:
+- **Split.** Random, with a fixed seed:
 
   | Set | Share | Examples |
   |---|---|---|
@@ -45,79 +46,73 @@ All parameters are kept fixed, so the two directions fully define each example.
   | Validation | 15 % | 2,036 |
   | Test | 15 % | 2,036 |
 
-  Each example is a distinct (θ_d, θ_i) pair, so the test set only contains combinations never used in training. The code checks this explicitly.
+  The test set contains only direction combinations absent from training. The code checks this explicitly.
 
 ## Network
 
-| Item | Value |
+| | |
 |---|---|
-| Inputs (2) | `[THETA_DES_DEG, THETA_INT_DEG]`, standardized |
-| Outputs (16) | `[real(w_1..w_8), imag(w_1..w_8)]`, standardized |
-| Architecture | 2 → 128 → 128 → 128 → 16, tanh hidden layers, linear output (35,472 parameters) |
-| Loss | Mean squared error on the standardized outputs |
-| Optimizer | Adam, batch 64, learning rate 10⁻³ halved every 250 epochs |
-| Early stopping | On the validation loss, patience 150 epochs; the best epoch is kept |
+| Inputs (2) | θ_d, θ_i (standardized) |
+| Outputs (16) | Re(w₁ … w₈), Im(w₁ … w₈) (standardized) |
+| Architecture | 2 → 128 → 128 → 128 → 16, tanh hidden layers, linear output |
+| Parameters | 35,472 |
+| Loss | Mean squared error |
+| Optimizer | Adam, batch size 64, learning rate 10⁻³ halved every 250 epochs |
+| Regularization | Early stopping on the validation loss (patience 150 epochs) |
 
-The FCNN, Adam and backpropagation are written in base MATLAB (`TRAIN_FCNN_MODEL.m`, `FORWARD_FCNN_NETWORK.m`). This means the code needs no toolbox and every step of training is visible.
+The network, backpropagation and optimizer are implemented in base MATLAB.
 
-## Performance metrics
+## Evaluation metrics
 
-All metrics are computed on the test set, for both LCMV and the FCNN. The response is `w' a(θ)`, as in the LCMV code.
+The array response is `w' a(θ)`.
 
 | Metric | Definition | Target |
 |---|---|---|
 | Desired gain | 20 log₁₀ \|w' a(θ_d)\| | 0 dB |
 | Null depth | 20 log₁₀ (\|w' a(θ_i)\| / \|w' a(θ_d)\|) | ≤ −40 dB |
-| Output SINR | P_s \|w' a(θ_d)\|² / (w' R_in w), with R_in = P_n I + P_i a_i a_i' | as close to LCMV as possible |
+| Output SINR | P_s \|w' a(θ_d)\|² / (w' R_in w), with R_in = P_n I + P_i a_i a_i' | Close to LCMV |
 | SINR loss | SINR_LCMV − SINR_FCNN | ≈ 0 dB |
-| Weight NMSE | 10 log₁₀ (‖w_FCNN − w_LCMV‖² / ‖w_LCMV‖²) | as low as possible |
-| Success | \|desired gain\| ≤ 0.5 dB **and** null depth ≤ −40 dB | — |
+| Weight NMSE | 10 log₁₀ (‖w_FCNN − w_LCMV‖² / ‖w_LCMV‖²) | As low as possible |
 
-## Results (2,036 unseen test combinations)
+## Results
 
-**Training.** The best validation loss, 4.4·10⁻⁵, was reached at epoch 1,973 of 2,000 in about 5 minutes. Validation follows training closely, so there is no overfitting. The loss was still decreasing slowly when the epoch limit was reached.
+Results are on the 2,036 test combinations.
 
-| Metric | Median | 95 % of cases better than | Worst |
+| Metric | Median | 95th percentile | Worst case |
 |---|---|---|---|
-| FCNN \|desired gain error\| | 0.013 dB | 0.042 dB | 0.52 dB |
-| FCNN null depth | −55.4 dB | −44.8 dB | −22.9 dB |
-| FCNN SINR loss vs LCMV | 0.009 dB | 0.09 dB | 2.97 dB |
-| FCNN weight NMSE | −45.8 dB | −40.5 dB | −27.5 dB |
+| \|Desired gain error\| | 0.013 dB | 0.042 dB | 0.52 dB |
+| Null depth | −55.4 dB | −44.8 dB | −22.9 dB |
+| SINR loss vs LCMV | 0.009 dB | 0.09 dB | 2.97 dB |
+| Weight NMSE | −45.8 dB | −40.5 dB | −27.5 dB |
 
-- **Desired response.** Within ±0.5 dB in 2,035 of 2,036 cases (99.95 %).
-- **Null depth.** −40 dB or deeper in **99.2 %** of cases.
-- **Both criteria.** Met in **99.2 %** of cases.
-- **LCMV reference.** The desired gain is exactly 0 dB and the null is exact to machine precision. The summary shows this as −300 dB, which is the numerical floor used to avoid log(0).
+- **Desired response within ±0.5 dB:** 99.95 % of test cases.
+- **Null depth ≤ −40 dB:** 99.2 % of test cases.
+- **Training:** the best validation loss is 4.4 × 10⁻⁵ (standardized outputs). Training and validation losses stay close throughout, so there is no overfitting.
+- **Limits:** the few cases below the null-depth target lie at the edges of the angular range (|θ| ≈ 60°) or near the minimum separation. In those regions the LCMV weights vary fastest with direction.
 
-**Where the FCNN is weakest.** The few failures are in two regions:
-- at the edges of the angle range (|θ| ≈ 60°);
-- close to the minimum separation (|θ_d − θ_i| ≈ 5°).
-
-In both regions the LCMV weights change fastest with the directions. For example, the worst case is θ_d = 60°, θ_i = 55°, with a null depth of −22.9 dB.
-
-**Computation time per example.**
+**Latency per example.**
 
 | Method | Time |
 |---|---|
-| LCMV (covariance + solve) | about 12 µs |
-| FCNN, one example at a time | about 40 µs |
-| FCNN, batch | about 5.5 µs |
+| LCMV (covariance construction + linear solve) | about 12 µs |
+| FCNN, single example | about 30–40 µs |
+| FCNN, batched | about 5 µs |
 
-In this simple case LCMV has a closed-form solution, so the FCNN is not faster. The goal of this step is to check that the FCNN can reproduce the LCMV weights. The speed advantage is expected in harder cases, where no closed-form solution exists.
+LCMV has a closed-form solution in this setting, so this step evaluates accuracy rather than speed. Latency gains are expected in scenarios without a closed-form solution, such as phase-only or quantized excitations and sidelobe-constrained synthesis.
 
 ## Files
 
 | File | Role |
 |---|---|
-| `MAIN_FCNN_LCMV.m` | Input parameters; runs the full workflow |
-| `GENERATE_FCNN_DATASET.m` | Runs LCMV for every direction pair and stores the inputs and outputs |
-| `SPLIT_FCNN_DATASET.m` | Training / validation / test split, with a check that no combination is shared |
-| `TRAIN_FCNN_MODEL.m` | FCNN training (Adam, early stopping on validation) |
-| `FORWARD_FCNN_NETWORK.m` | Forward pass of the FCNN |
+| `MAIN_FCNN_LCMV.m` | Parameters and full workflow |
+| `GENERATE_FCNN_DATASET.m` | LCMV solution for every direction pair |
+| `SPLIT_FCNN_DATASET.m` | Training / validation / test split with an overlap check |
+| `TRAIN_FCNN_MODEL.m` | Network training (Adam, early stopping) |
+| `FORWARD_FCNN_NETWORK.m` | Forward pass |
 | `PREDICT_FCNN_WEIGHTS.m` | Directions → complex weights |
-| `EVALUATE_FCNN_PERFORMANCE.m` | Per-example metrics and summary statistics |
-| `MEASURE_COMPUTATION_TIME.m` | LCMV vs FCNN time per example |
-| `PRINT_FCNN_SUMMARY.m` | Documentation of the run (dataset, network, metrics) |
-| `PLOT_FCNN_RESULTS.m` | Training curve, responses, weights, distributions, null-depth map |
-| `WRITE_FCNN_OUTPUT.m` | Writes the summary, the test table and the figures to `OUTPUT/` |
-| `GENERATE_LCMV_ARRAY_GEOMETRY.m`, `COMPUTE_LCMV_*.m` | Reference LCMV code provided by the supervisor (unchanged) |
+| `EVALUATE_FCNN_PERFORMANCE.m` | Per-example metrics and statistics |
+| `MEASURE_COMPUTATION_TIME.m` | LCMV and FCNN latency |
+| `PRINT_FCNN_SUMMARY.m` | Experiment summary |
+| `PLOT_FCNN_RESULTS.m` | Training curve, patterns, weights, distributions, null-depth map |
+| `WRITE_FCNN_OUTPUT.m` | Result files and figures |
+| `GENERATE_LCMV_ARRAY_GEOMETRY.m`, `COMPUTE_LCMV_*.m` | LCMV beamformer and array model |

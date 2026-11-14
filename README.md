@@ -1,120 +1,94 @@
 # AI-Driven Real-Time Array Reconfiguration for Physical-Layer Cybersecurity
 
-Master ICS project (Project #6), Université de Rennes / IETR.
-Supervisor: Nicola Anselmi.
-
-> **Status:** Step 1 is complete. An FCNN learns the LCMV beamformer for a linear array with 8 elements, one desired signal and one interferer. See [`STEP1_FCNN_LCMV/`](STEP1_FCNN_LCMV/).
-
-## Repository structure
-
-| Folder | Content |
-|---|---|
-| [`LCMV_REFERENCE/`](LCMV_REFERENCE/) | Reference LCMV beamformer provided by the supervisor (unchanged). Run `MAIN_LCMV_ARRAY.m`. |
-| [`STEP1_FCNN_LCMV/`](STEP1_FCNN_LCMV/) | Step 1: an FCNN trained on LCMV data and compared with LCMV. Run `MAIN_FCNN_LCMV.m`; the dataset, network, metrics and results are documented in the folder's README. |
-
-Each folder is self-contained. Open MATLAB in the folder and run its `MAIN_*.m` script. The code needs base MATLAB only (tested on R2024b) and recreates all outputs (dataset, figures, result files) when it runs.
+Deep learning for real-time phased-array beamforming. The goal is to keep full gain toward a legitimate user while placing deep nulls toward jammers and eavesdroppers.
 
 ---
 
-## 1. Context
+## Motivation
 
-Future wireless and satellite links will operate in dynamic environments. They will be exposed to interference, jamming, and unauthorized receivers (eavesdroppers).
+Wireless and satellite links increasingly operate in dynamic environments exposed to interference, jamming and unauthorized receivers. A phased antenna array can counter these threats by shaping its radiation pattern electronically. It does this by setting the amplitude and phase of each element:
 
-A phased antenna array can shape its radiation pattern electronically by changing the amplitude and phase of each element. In principle, this means it can:
+- a **beam** toward the legitimate user;
+- **nulls** toward jammers and eavesdroppers.
 
-- send a strong beam toward the legitimate user, and
-- place deep nulls toward jammers and eavesdroppers.
+Classical synthesis methods (convex optimization, genetic algorithms, particle swarm optimization) compute these excitations iteratively. They are too slow to follow fast-changing or moving threats. This work investigates neural networks that learn the mapping from the scenario to the optimal excitations. Once trained, a single forward pass replaces the iterative solver.
 
-Classical synthesis methods compute the right element weights by iterative optimization, such as convex programming, genetic algorithms (GA), or particle swarm optimization (PSO). They work, but they are too slow when the scene changes quickly, for example when a threat moves. This project uses AI to make the reconfiguration fast enough for real time.
+## Problem formulation
 
-## 2. Problem statement
-
-We consider an array of $N$ elements. Each element $n$ has a complex weight:
-
-$$
-w_n = \alpha_n \, e^{j\varphi_n}
-$$
-
-For a linear array with element positions $x_n$, the radiation pattern (array factor) is:
+Consider an array of $N$ elements with complex weights $w_n = \alpha_n e^{j\varphi_n}$. For a linear array with element positions $x_n$, the array factor is:
 
 $$
 AF(\theta) = \sum_{n=1}^{N} w_n \, e^{\,j k x_n \sin\theta}, \qquad k = \frac{2\pi}{\lambda}
 $$
 
-Given a scenario:
+Given the direction of the desired user $\theta_d$, the directions of $L$ threats $\theta_1, \dots, \theta_L$, the array geometry and the operating frequency, find $\mathbf{w}$ such that:
 
-- the direction of the desired user, $\theta_d$,
-- the directions of $L$ threats (jammers or eavesdroppers), $\theta_1, \dots, \theta_L$,
-- the array geometry and operating frequency,
-
-the task is to find the weights $\mathbf{w}$ such that:
-
-| Requirement | Meaning |
+| Requirement | Purpose |
 |---|---|
-| High gain toward $\theta_d$ | The legitimate link is maintained. |
-| Deep nulls toward each $\theta_l$ | Jamming is rejected and eavesdroppers receive almost nothing. |
-| Low sidelobe level elsewhere | No unwanted radiation in other directions. |
+| High gain toward $\theta_d$ | Maintain the legitimate link |
+| Deep nulls toward each $\theta_l$ | Reject jamming and deny eavesdroppers |
+| Low sidelobe level | Limit unwanted radiation elsewhere |
 
-The weights must be computed **in real time**, that is, with very low latency, as the scenario changes.
+The weights must be computed with very low latency, as the scenario evolves.
 
-## 3. Objective
-
-Develop AI-based array synthesis techniques that reconfigure the radiation pattern in real time. The aim is to make wireless links more secure and resilient against interference, jamming, and eavesdropping.
-
-## 4. Challenges
-
-- **Multi-scenario optimization.** The solution must handle several users, several interferers, and different security conditions.
-- **Fast adaptation to evolving threats.** The array must react to threats that change or move.
-- **Real-time constraints.** Reconfiguration must happen with very low latency.
-
-## 5. Approach
-
-The AI model learns the mapping from a scenario to the optimal array excitations. After training, a single forward pass replaces the slow iterative optimizer.
+## Approach
 
 ```
- Scenario parameters            AI model             Array weights         Reconfigured array
- (frequency, geometry,   ──►   (neural      ──►    (amplitudes α_n,  ──►  beam → user
-  user direction,               network)            phases φ_n)            nulls → threats
-  threat directions)
+ Scenario                      Neural network          Array weights          Reconfigured pattern
+ (geometry, frequency,   ──►   (trained offline)  ──►  (α_n, φ_n)       ──►   beam → user
+  user and threat                                                             nulls → threats
+  directions)
 ```
 
-The workflow has three stages:
+1. **Generate optimal solutions.** A reference beamformer computes the optimal excitations for a large set of scenarios.
+2. **Train the model.** A neural network learns the mapping from scenario to excitations.
+3. **Reconfigure in real time.** The trained network predicts the excitations for new, unseen scenarios.
 
-1. **Generate optimal solutions.** Use a classical optimizer to compute the optimal excitations for many different scenarios.
-2. **Train the AI model.** Learn the mapping between the scenario and pattern constraints on one side and the corresponding optimal excitations on the other.
-3. **Reconfigure in real time.** Adapt beams and nulls quickly on new, unseen scenarios to keep the link connected while suppressing radiation toward undesired directions.
+## Results: Step 1
 
-## 6. Expected deliverables
+**Task.** A fully connected neural network predicts the LCMV beamformer weights of an 8-element linear array from the desired and interference directions. It is evaluated on 2,036 direction combinations never seen during training.
 
-- A simulation model of the antenna array and its radiation pattern.
-- A classical synthesis method (optimizer) used as the reference.
-- A training dataset of scenarios and their optimal weights.
-- A trained AI model that predicts the array weights.
-- An evaluation that compares the AI model with the optimizer on new scenarios, using:
-  - null depth toward each threat,
-  - gain toward the user,
-  - sidelobe level,
-  - security metrics, such as user-to-eavesdropper gain ratio and secrecy rate,
-  - computation time.
-- Extensions: multiple jammers and moving threats.
-
-## 7. Roadmap
-
-| Phase | Work |
+| Metric | FCNN result |
 |---|---|
-| 1 | Phased-array fundamentals: array factor, weights, beamforming, nulls |
-| 2 | State of the art: AI for array synthesis and adaptive nulling |
-| 3 | Array model and classical synthesis / optimizer |
-| 4 | Training dataset generation |
-| 5 | Choice and training of the AI model |
-| 6 | Testing on new scenarios and comparison with the optimizer |
-| 7 | Improvements: multiple jammers, moving scenarios |
+| Desired-direction gain error | 0.013 dB (median) |
+| Null depth toward the interferer | −55 dB (median) |
+| Test cases with null depth ≤ −40 dB | 99.2 % |
+| SINR loss relative to LCMV | 0.009 dB (median) |
 
-## 8. Tools
+Details are in [`STEP1_FCNN_LCMV/`](STEP1_FCNN_LCMV/).
 
-- **MATLAB:** array modelling, classical synthesis, and visualization.
-- **Python / PyTorch:** training and evaluating the AI model.
+## Repository structure
+
+| Folder | Content | Entry point |
+|---|---|---|
+| [`LCMV_REFERENCE/`](LCMV_REFERENCE/) | Reference LCMV beamformer for linear and planar arrays | `MAIN_LCMV_ARRAY.m` |
+| [`STEP1_FCNN_LCMV/`](STEP1_FCNN_LCMV/) | FCNN trained on LCMV solutions and benchmarked against LCMV | `MAIN_FCNN_LCMV.m` |
+
+## Getting started
+
+**Requirements:** MATLAB (tested on R2024b). No toolbox is required.
+
+```matlab
+cd STEP1_FCNN_LCMV
+MAIN_FCNN_LCMV
+```
+
+Every folder is self-contained. Each `MAIN_*.m` script defines all its parameters at the top and regenerates its dataset, figures and result files.
+
+## Roadmap
+
+- [x] Phased-array model and reference LCMV beamformer
+- [x] FCNN learning LCMV weights (one user, one interferer, linear array)
+- [ ] Multiple interferers and moving threats
+- [ ] Hardware constraints: phase-only and quantized excitations
+- [ ] Broadened nulls for uncertain threat directions
+- [ ] Security metrics: secrecy rate against eavesdroppers
+- [ ] Planar arrays
 
 ## Author
 
-Bilel Louati, Master 2 ICS, Université de Rennes.
+**Bilel Louati**, Master 2 ICS, Université de Rennes / IETR.
+
+## Acknowledgements
+
+Supervised by Nicola Anselmi (IETR, Université de Rennes), who provided the reference LCMV beamformer implementation.
