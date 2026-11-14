@@ -1,0 +1,21 @@
+# Generated outputs (recreated by running the MAIN scripts)
+OUTPUT/
+*.dat
+*.mat
+*.png
+*.fig
+
+# MATLAB temporary files
+*.asv
+*.m~
+slprj/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

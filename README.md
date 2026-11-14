@@ -3,7 +3,16 @@
 Master ICS project (Project #6), Université de Rennes / IETR.
 Supervisor: Nicola Anselmi.
 
-> **Status:** planning. No code has been pushed yet. This README describes the problem and what the project must deliver.
+> **Status:** Step 1 is complete. An FCNN learns the LCMV beamformer for a linear array with 8 elements, one desired signal and one interferer. See [`STEP1_FCNN_LCMV/`](STEP1_FCNN_LCMV/).
+
+## Repository structure
+
+| Folder | Content |
+|---|---|
+| [`LCMV_REFERENCE/`](LCMV_REFERENCE/) | Reference LCMV beamformer provided by the supervisor (unchanged). Run `MAIN_LCMV_ARRAY.m`. |
+| [`STEP1_FCNN_LCMV/`](STEP1_FCNN_LCMV/) | Step 1: an FCNN trained on LCMV data and compared with LCMV. Run `MAIN_FCNN_LCMV.m`; the dataset, network, metrics and results are documented in the folder's README. |
+
+Each folder is self-contained. Open MATLAB in the folder and run its `MAIN_*.m` script. The code needs base MATLAB only (tested on R2024b) and recreates all outputs (dataset, figures, result files) when it runs.
 
 ---
 
