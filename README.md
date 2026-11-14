@@ -91,4 +91,4 @@ Every folder is self-contained. Each `MAIN_*.m` script defines all its parameter
 
 ## Acknowledgements
 
-Supervised by Nicola Anselmi (IETR, Université de Rennes), who provided the reference LCMV beamformer implementation.
+Supervised by Prof. Nicola Anselmi (IETR, Université de Rennes), who provided the reference LCMV beamformer implementation.
